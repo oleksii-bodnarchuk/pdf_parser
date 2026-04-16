@@ -29,6 +29,7 @@ class MenuItem:
     price: Price
     description: str
     dish_id: str
+    category_path: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -44,3 +45,21 @@ class ExtractedLine:
     x1: float
     max_size: float
     segments: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class DetectedCategory:
+    text: str
+    line_index: int
+    path: tuple[str, ...]
+    confidence: float
+    role: str
+
+
+@dataclass(frozen=True)
+class MenuStructure:
+    category_paths_by_index: dict[int, tuple[str, ...]]
+    no_price_item_categories: frozenset[str]
+    detected_categories: tuple[DetectedCategory, ...]
+    confidence: float
+    category_line_indexes: frozenset[int]

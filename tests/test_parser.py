@@ -3,7 +3,7 @@ from dataclasses import replace
 import pytest
 
 from pdf_parser.cli import build_parser
-from pdf_parser.models import ExtractedLine
+from pdf_parser.models import DetectedCategory, ExtractedLine, MenuStructure
 from pdf_parser.parser import parse_menu
 from pdf_parser.profiles import ESPN_BET_PROFILE
 
@@ -40,6 +40,7 @@ def test_parse_priced_item_with_description() -> None:
     assert items[0].price == 17
     assert items[0].description == "7 oz. steakburger, choice of cheese"
     assert items[0].dish_id == "001"
+    assert items[0].category_path == ("BURGERS",)
 
 
 def test_parse_missing_price_item_in_no_price_section() -> None:
@@ -119,6 +120,36 @@ def test_cli_accepts_profile_option() -> None:
     assert args.profile == "espn_bet"
 
 
+def test_cli_accepts_auto_structure_option() -> None:
+    args = build_parser().parse_args(["menu.pdf", "--auto-structure"])
+
+    assert args.auto_structure is True
+
+
 def test_cli_rejects_unknown_profile() -> None:
     with pytest.raises(SystemExit):
         build_parser().parse_args(["menu.pdf", "--profile", "unknown"])
+
+
+def test_parse_menu_uses_detected_structure_category_path() -> None:
+    structure = MenuStructure(
+        category_paths_by_index={0: ("FOOD", "SNACKS")},
+        no_price_item_categories=frozenset(),
+        detected_categories=(
+            DetectedCategory("FOOD", 0, ("FOOD",), 0.8, "parent"),
+            DetectedCategory("SNACKS", 0, ("FOOD", "SNACKS"), 0.9, "leaf"),
+        ),
+        confidence=0.85,
+        category_line_indexes=frozenset({0}),
+    )
+
+    items = parse_menu(
+        [
+            line("SNACKS", 10, 16),
+            line("CRISPY PICKLES $9", 20),
+        ],
+        structure=structure,
+    )
+
+    assert items[0].category == "SNACKS"
+    assert items[0].category_path == ("FOOD", "SNACKS")
