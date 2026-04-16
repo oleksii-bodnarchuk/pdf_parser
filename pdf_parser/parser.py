@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from pdf_parser.models import ExtractedLine, MenuItem, Price
+from pdf_parser.models import ExtractedLine, MenuItem, MenuProfile, Price
 from pdf_parser.normalization import (
     ONLY_PRICE_RE,
     PRICE_RE,
@@ -12,42 +12,7 @@ from pdf_parser.normalization import (
     normalize_whitespace,
     parse_price,
 )
-
-
-KNOWN_CATEGORIES = {
-    "LEADING OFF",
-    "SLIDER TOWERS",
-    "AIN'T NO THING BUT A CHICKEN...",
-    "AIN’T NO THING BUT A CHICKEN…",
-    "JUMBO CHICKEN WINGS BREADED CHICKEN TENDERS",
-    "SIGNATURE SAUCES",
-    "FLIGHTS",
-    "SALADS & SOUP",
-    "HANDHELDS",
-    "BURGERS",
-    "MAIN EVENT",
-    "SIDES",
-    "OVERTIME",
-    "DRINK MENU",
-    "SIGNATURE COCKTAILS",
-    "ZERO PROOF",
-    "DRAFT BEER",
-    "BOTTLES & CANS",
-    "WINES",
-    "ENERGY",
-}
-
-NO_PRICE_ITEM_CATEGORIES = {
-    "SIGNATURE SAUCES",
-    "JUMBO CHICKEN WINGS BREADED CHICKEN TENDERS",
-    "ENERGY",
-}
-
-SECTION_NOTE_PREFIXES = (
-    "served with",
-    "gluten-free",
-    "sub beyond",
-)
+from pdf_parser.profiles import ESPN_BET_PROFILE
 
 
 @dataclass
@@ -67,7 +32,10 @@ class _DraftItem:
         )
 
 
-def parse_menu(lines: list[ExtractedLine]) -> list[MenuItem]:
+def parse_menu(
+    lines: list[ExtractedLine],
+    profile: MenuProfile = ESPN_BET_PROFILE,
+) -> list[MenuItem]:
     items: list[MenuItem] = []
     current_category: str | None = None
     current_item: _DraftItem | None = None
@@ -91,7 +59,7 @@ def parse_menu(lines: list[ExtractedLine]) -> list[MenuItem]:
             section_price = parse_price(only_price.group(1))
             continue
 
-        if _is_category_line(line):
+        if _is_category_line(line, profile):
             flush_current()
             current_category = normalize_name(text)
             section_price = None
@@ -113,12 +81,23 @@ def parse_menu(lines: list[ExtractedLine]) -> list[MenuItem]:
             current_item = _DraftItem(current_category, normalize_name(name), parse_price(price))
             continue
 
-        if _is_section_note(text):
+        if _is_section_note(text, profile):
             continue
 
-        if _is_no_price_item_line(text, current_category, line, section_price):
+        if _is_no_price_item_line(text, current_category, line, section_price, profile):
             flush_current()
-            current_item = _DraftItem(current_category, normalize_name(text), section_price)
+            segments = _item_segments(line, text)
+            for segment in segments[:-1]:
+                items.append(
+                    _DraftItem(current_category, normalize_name(segment), section_price).build(
+                        len(items) + 1
+                    )
+                )
+            current_item = _DraftItem(
+                current_category,
+                normalize_name(segments[-1]),
+                section_price,
+            )
             continue
 
         if current_item is not None:
@@ -128,13 +107,13 @@ def parse_menu(lines: list[ExtractedLine]) -> list[MenuItem]:
     return items
 
 
-def _is_category_line(line: ExtractedLine) -> bool:
+def _is_category_line(line: ExtractedLine, profile: MenuProfile) -> bool:
     text = normalize_name(line.text)
     if PRICE_RE.search(text):
         return False
-    if text in KNOWN_CATEGORIES:
+    if text in profile.known_categories:
         return True
-    return line.max_size >= 13.5 and is_mostly_upper(text)
+    return line.max_size >= profile.heading_min_size and is_mostly_upper(text)
 
 
 def _split_priced_items(text: str) -> list[tuple[str, str]]:
@@ -152,9 +131,14 @@ def _split_priced_items(text: str) -> list[tuple[str, str]]:
     return parts
 
 
-def _is_section_note(text: str) -> bool:
+def _is_section_note(text: str, profile: MenuProfile) -> bool:
     folded = text.casefold()
-    return any(folded.startswith(prefix) for prefix in SECTION_NOTE_PREFIXES)
+    return any(folded.startswith(prefix) for prefix in profile.section_note_prefixes)
+
+
+def _item_segments(line: ExtractedLine, fallback_text: str) -> tuple[str, ...]:
+    segments = tuple(normalize_name(segment) for segment in line.segments if normalize_name(segment))
+    return segments or (fallback_text,)
 
 
 def _is_no_price_item_line(
@@ -162,9 +146,10 @@ def _is_no_price_item_line(
     current_category: str,
     line: ExtractedLine,
     section_price: Price,
+    profile: MenuProfile,
 ) -> bool:
     return (
-        current_category in NO_PRICE_ITEM_CATEGORIES
+        current_category in profile.no_price_item_categories
         or section_price is not None
-        or (line.max_size < 13.5 and is_mostly_upper(text))
+        or (line.max_size < profile.heading_min_size and is_mostly_upper(text))
     )

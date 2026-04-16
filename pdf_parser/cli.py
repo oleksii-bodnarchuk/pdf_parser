@@ -5,7 +5,9 @@ import json
 from pathlib import Path
 
 from pdf_parser.extractor import extract_lines
+from pdf_parser.models import MenuProfile
 from pdf_parser.parser import parse_menu
+from pdf_parser.profiles import ESPN_BET_PROFILE, PROFILES, get_profile
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,12 +20,22 @@ def build_parser() -> argparse.ArgumentParser:
         default=Path("output/espn_bet.json"),
         help="Path for the generated JSON file.",
     )
+    parser.add_argument(
+        "--profile",
+        choices=sorted(PROFILES),
+        default=ESPN_BET_PROFILE.name,
+        help="Menu parsing profile to use.",
+    )
     return parser
 
 
-def run(input_pdf: Path, output: Path) -> list[dict[str, object]]:
-    lines = extract_lines(input_pdf)
-    items = parse_menu(lines)
+def run(
+    input_pdf: Path,
+    output: Path,
+    profile: MenuProfile = ESPN_BET_PROFILE,
+) -> list[dict[str, object]]:
+    lines = extract_lines(input_pdf, profile)
+    items = parse_menu(lines, profile)
     payload = [item.to_dict() for item in items]
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
@@ -32,7 +44,7 @@ def run(input_pdf: Path, output: Path) -> list[dict[str, object]]:
 
 def main() -> None:
     args = build_parser().parse_args()
-    payload = run(args.input_pdf, args.output)
+    payload = run(args.input_pdf, args.output, get_profile(args.profile))
     print(f"Wrote {len(payload)} menu items to {args.output}")
 
 

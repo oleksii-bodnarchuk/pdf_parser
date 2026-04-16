@@ -11,7 +11,7 @@ uv sync
 ## Run
 
 ```powershell
-uv run parse-menu "path to your pdf menu" --output output\espn_bet.json
+uv run parse-menu "path to your pdf menu" --output output\espn_bet.json --profile espn_bet
 ```
 
 The generated JSON is an array of objects with:
@@ -32,4 +32,8 @@ uv run pytest
 
 ## Notes
 
-The parser is intentionally heuristic and tuned for this sample menu. It uses pdfplumber word coordinates, splits each page into left/right columns, reconstructs visual lines, then groups headers, item lines, prices, and descriptions. It does not perform OCR.
+The parser is intentionally heuristic and tuned through small menu profiles. The default `espn_bet` profile uses pdfplumber word coordinates, splits each page into left/right columns, reconstructs visual lines, then groups headers, item lines, prices, and descriptions.
+
+To support another similar machine-generated menu, add a new `MenuProfile` in `pdf_parser/profiles.py` with its category names and layout thresholds, then run the CLI with `--profile`.
+
+It does not perform OCR.
