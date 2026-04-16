@@ -118,12 +118,25 @@ def test_cli_accepts_profile_option() -> None:
     args = build_parser().parse_args(["menu.pdf", "--profile", "espn_bet"])
 
     assert args.profile == "espn_bet"
+    assert args.auto_structure is True
 
 
-def test_cli_accepts_auto_structure_option() -> None:
-    args = build_parser().parse_args(["menu.pdf", "--auto-structure"])
+def test_cli_uses_auto_structure_by_default() -> None:
+    args = build_parser().parse_args(["menu.pdf"])
 
     assert args.auto_structure is True
+
+
+def test_cli_accepts_structure_output_option() -> None:
+    args = build_parser().parse_args(["menu.pdf", "--structure-output", "out/categories.json"])
+
+    assert str(args.structure_output) == "out\\categories.json"
+
+
+def test_cli_can_use_profile_categories_explicitly() -> None:
+    args = build_parser().parse_args(["menu.pdf", "--profile-categories"])
+
+    assert args.auto_structure is False
 
 
 def test_cli_rejects_unknown_profile() -> None:
